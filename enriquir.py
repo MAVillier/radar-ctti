@@ -101,7 +101,56 @@ def gather():
         if len(seen)>=CAP: break
     return list(seen.values())
 
+SF = ("codi_expedient,codi_organ,nom_organ,nom_departament_ens,objecte_contracte,codi_cpv,"
+      "procediment,tipus_tramitacio,racionalitzacio_contractacio,pressupost_licitacio_sense,"
+      "valor_estimat_contracte,termini_presentacio_ofertes,enllac_publicacio,denominacio_adjudicatari,"
+      "import_adjudicacio_sense,ofertes_rebudes,fase_publicacio")
+
+def num(v):
+    try: return float(v)
+    except: return None
+
+def dedup_raw(rows):
+    m={}
+    for r in rows:
+        k=r.get("codi_expedient")
+        if k and k not in m: m[k]=r
+    return list(m.values())
+
+def rec(r):
+    cl=[c.strip() for c in (r.get("codi_cpv") or "").split("||") if c.strip()][:4]
+    of=num(r.get("ofertes_rebudes")); rac=r.get("racionalitzacio_contractacio") or ""
+    sda="child" if "Específic" in rac else ("parent" if rac=="Sistema Dinàmic d'adquisició" else "")
+    return {"exp":r.get("codi_expedient"),"organCode":r.get("codi_organ"),"organ":txt(r.get("nom_organ")),
+            "dept":txt(r.get("nom_departament_ens")),"objecte":txt(r.get("objecte_contracte")),"cpv":cl,
+            "proc":r.get("procediment") or "","tram":r.get("tipus_tramitacio") or "","sda":sda,
+            "base":num(r.get("pressupost_licitacio_sense")),"vec":num(r.get("valor_estimat_contracte")),
+            "termini":r.get("termini_presentacio_ofertes"),"fase":r.get("fase_publicacio"),
+            "url":url_of(r.get("enllac_publicacio")),"adj":txt(r.get("denominacio_adjudicatari")) or None,
+            "importAdj":num(r.get("import_adjudicacio_sense")),"ofertes":(int(of) if of is not None else None)}
+
+def build_snapshot():
+    GEN="nom_ambit like '%Generalitat de Catalunya%'"
+    since=time.strftime("%Y-%m-%dT00:00:00", time.gmtime())
+    o=soda(SF, GEN+" AND fase_publicacio='Anunci de licitació' AND termini_presentacio_ofertes > '"+since+"'", "termini_presentacio_ofertes ASC", 1500)
+    o=[r for r in dedup_raw(o) if cpv_match(r.get("codi_cpv")) or "Específic" in (r.get("racionalitzacio_contractacio") or "")]
+    s=soda(SF, GEN+" AND fase_publicacio='Anunci de licitació' AND racionalitzacio_contractacio like '%Específic%'", "termini_presentacio_ofertes DESC", 300)
+    s=dedup_raw(s)[:25]
+    a=soda(SF, "codi_organ='11110' AND fase_publicacio='Adjudicació'", "data_publicacio_adjudicacio DESC", 400)
+    a=[r for r in dedup_raw(a) if cpv_match(r.get("codi_cpv")) and num(r.get("import_adjudicacio_sense")) and num(r.get("pressupost_licitacio_sense"))][:30]
+    om={}
+    for r in o+s:
+        k=r.get("codi_expedient")
+        if k: om.setdefault(k,r)
+    OPEN=[rec(r) for r in om.values()]
+    OPEN.sort(key=lambda x:(0 if x["sda"]=="child" else 1, x["termini"] or "9999"))
+    return {"generated":time.strftime("%Y-%m-%d", time.gmtime()),"open":OPEN,"adjudicated":[rec(r) for r in a]}
+
+
 def main():
+    print("Refrescant instantania (dades fresques d'avui)...")
+    snap=build_snapshot()
+    print(f"  instantania: {len(snap['open'])} obertes, {len(snap['adjudicated'])} adjudicades")
     print("Recollint expedients d'interès…")
     rows=gather()
     print(f"  {len(rows)} expedients a processar (CAP={CAP})")
@@ -125,12 +174,14 @@ def main():
     print(f"FET: {len(ENRICH)} expedients enriquits (amb criteris={nc}, amb licitadors={nb})")
 
     html=open(INDEX, encoding="utf-8").read()
-    repl="/* ENRICH:start (no editar a ma; ho regenera enriquir.py) */\nconst ENRICH = "+json.dumps(ENRICH, ensure_ascii=False)+";\n/* ENRICH:end */"
-    html2=re.sub(r"/\* ENRICH:start.*?/\* ENRICH:end \*/", lambda m: repl, html, count=1, flags=re.S)
-    if html2==html:
-        print("AVÍS: no s'han trobat els marcadors ENRICH a index.html"); sys.exit(1)
-    open(INDEX,"w",encoding="utf-8").write(html2)
-    print("index.html actualitzat:", len(html2), "bytes")
+    rE="/* ENRICH:start (no editar a ma; ho regenera enriquir.py) */\nconst ENRICH = "+json.dumps(ENRICH, ensure_ascii=False)+";\n/* ENRICH:end */"
+    rS="/* SNAPSHOT:start (ho regenera enriquir.py) */\nconst SNAPSHOT="+json.dumps(snap, ensure_ascii=False)+";\n/* SNAPSHOT:end */"
+    h=re.sub(r"/\* ENRICH:start.*?/\* ENRICH:end \*/", lambda m: rE, html, count=1, flags=re.S)
+    h=re.sub(r"/\* SNAPSHOT:start.*?/\* SNAPSHOT:end \*/", lambda m: rS, h, count=1, flags=re.S)
+    if h==html:
+        print("AVÍS: no s'han trobat els marcadors a index.html"); sys.exit(1)
+    open(INDEX,"w",encoding="utf-8").write(h)
+    print("index.html actualitzat:", len(h), "bytes")
 
 if __name__=="__main__":
     main()
