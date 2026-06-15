@@ -147,10 +147,25 @@ def build_snapshot():
     return {"generated":time.strftime("%Y-%m-%d", time.gmtime()),"open":OPEN,"adjudicated":[rec(r) for r in a]}
 
 
+def alive_check():
+    """Comprova que el portal respon (si està caigut/limitat torna [] i NO actualitzem)."""
+    try:
+        d=soda("codi_expedient","codi_organ='11110'",limit=5)
+        return isinstance(d,list) and len(d)>0
+    except Exception:
+        return False
+
+
 def main():
+    if not alive_check():
+        print("AVÍS: el portal de dades obertes no respon ara mateix. Mantinc l'index.html actual i surto sense tocar res.")
+        return
     print("Refrescant instantania (dades fresques d'avui)...")
     snap=build_snapshot()
     print(f"  instantania: {len(snap['open'])} obertes, {len(snap['adjudicated'])} adjudicades")
+    if len(snap.get("open",[]))<5 or len(snap.get("adjudicated",[]))<3:
+        print("AVÍS: resultat sospitosament buit (probable tall del portal). NO sobreescric l'index.html. Surto.")
+        return
     print("Recollint expedients d'interès…")
     rows=gather()
     print(f"  {len(rows)} expedients a processar (CAP={CAP})")
