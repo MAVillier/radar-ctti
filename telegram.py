@@ -16,6 +16,7 @@ NOW=datetime.now(timezone.utc)
 TOKEN=os.environ.get("TELEGRAM_BOT_TOKEN","").strip()
 CHAT=os.environ.get("TELEGRAM_CHAT_ID","").strip()
 DRY=os.environ.get("TELEGRAM_DRY","")=="1"
+DIGEST=os.environ.get("TELEGRAM_DIGEST","")=="1"
 URL_APP="https://mavillier.github.io/radar-ctti/"
 
 def load_snapshot():
@@ -63,6 +64,10 @@ def main():
     os.makedirs(os.path.dirname(seen_path),exist_ok=True)
     json.dump({k:sorted(v)[-1500:] for k,v in S.items()}, open(seen_path,"w",encoding="utf-8"))
 
+    if not first and not DIGEST and not (new_lic or new_fut or new_ven or new_news):
+        print("Sense novetats; execució horària silenciosa.")
+        return
+
     d=NOW.strftime("%d/%m/%Y")
     L=[f"<b>📡 Radar TIC — {d}</b>"]
     if first:
@@ -77,7 +82,7 @@ def main():
                 sda=" 🟠SDA" if r.get("sda")=="child" else ""
                 L.append(f"• <b>{dtxt}</b>{sda} · {h(crop(r.get('organ'),26))} — {h(crop(r.get('objecte'),58))}")
             if len(new_lic)>6: L.append(f"  …i {len(new_lic)-6} més")
-        if closing:
+        if closing and DIGEST:
             L.append(f"\n⏳ <b>Tanquen en ≤7 dies ({len(closing)})</b>")
             for r in sorted(closing,key=lambda x:x.get("termini") or "")[:6]:
                 L.append(f"• <b>{days_left(r.get('termini'))} d</b> · {h(crop(r.get('organ'),26))} — {h(crop(r.get('objecte'),58))}")
@@ -96,7 +101,7 @@ def main():
             for n in new_news[:5]:
                 L.append(f"• <a href=\"{html.escape(n.get('link') or URL_APP)}\">{h(crop(n.get('t'),70))}</a> <i>({h(crop(n.get('src'),20))})</i>")
         if len(L)==1:
-            L.append("Sense novetats avui. Tot tranquil.")
+            L.append("Sense novetats. Tot tranquil.")
     L.append(f"\n<a href=\"{URL_APP}\">Obrir el Radar</a>")
     msg="\n".join(L)
 

@@ -109,7 +109,7 @@ def gather():
 
 SF = ("codi_expedient,codi_organ,nom_organ,nom_departament_ens,objecte_contracte,codi_cpv,"
       "procediment,tipus_tramitacio,racionalitzacio_contractacio,pressupost_licitacio_sense,"
-      "valor_estimat_contracte,termini_presentacio_ofertes,enllac_publicacio,denominacio_adjudicatari,"
+      "valor_estimat_contracte,termini_presentacio_ofertes,data_publicacio_anunci,enllac_publicacio,denominacio_adjudicatari,"
       "import_adjudicacio_sense,ofertes_rebudes,fase_publicacio")
 
 def num(v):
@@ -131,7 +131,7 @@ def rec(r):
             "dept":txt(r.get("nom_departament_ens")),"objecte":txt(r.get("objecte_contracte")),"cpv":cl,
             "proc":r.get("procediment") or "","tram":r.get("tipus_tramitacio") or "","sda":sda,
             "base":num(r.get("pressupost_licitacio_sense")),"vec":num(r.get("valor_estimat_contracte")),
-            "termini":r.get("termini_presentacio_ofertes"),"fase":r.get("fase_publicacio"),
+            "termini":r.get("termini_presentacio_ofertes"),"dpub":(r.get("data_publicacio_anunci") or "")[:10] or None,"fase":r.get("fase_publicacio"),
             "url":url_of(r.get("enllac_publicacio")),"adj":txt(r.get("denominacio_adjudicatari")) or None,
             "importAdj":num(r.get("import_adjudicacio_sense")),"ofertes":(int(of) if of is not None else None)}
 
