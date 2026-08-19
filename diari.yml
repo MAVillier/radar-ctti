@@ -1,0 +1,40 @@
+name: Radar TIC diari
+
+on:
+  schedule:
+    - cron: "45 5 * * *"     # cada dia ~07:45 hora catalana
+  workflow_dispatch: {}       # botó per executar-ho quan vulguis
+
+permissions:
+  contents: write
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Radar (licitacions, criteris, licitadors)
+        run: python enriquir.py
+
+      - name: Notícies i alertes
+        run: python noticies.py
+
+      - name: Notificació Telegram
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python telegram.py
+
+      - name: Desar canvis
+        run: |
+          git config user.name  "radar-bot"
+          git config user.email "radar-bot@users.noreply.github.com"
+          git add index.html noticies.json alertes.json state/seen.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Radar TIC: actualitzacio diaria"
+          git push

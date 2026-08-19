@@ -90,6 +90,12 @@ def gather():
     blocks.append(soda(F, GEN+" AND fase_publicacio='Expedient en avaluació'", "termini_presentacio_ofertes DESC", 300))
     blocks.append(soda(F, "codi_organ='11110' AND fase_publicacio='Adjudicació'", "data_publicacio_adjudicacio DESC", 200))
     blocks.append(soda(F, GEN+" AND fase_publicacio='Anunci de licitació' AND termini_presentacio_ofertes > '"+since+"'", "termini_presentacio_ofertes ASC", 1500))
+    # Bloc B: mon local (ajuntaments + diputacions + BIT)
+    LOC=("(upper(nom_organ) like '%AJUNTAMENT%' OR upper(nom_organ) like '%DIPUTACI%' OR "
+         "(upper(nom_organ) like '%INSTITUT MUNICIPAL%' AND upper(nom_organ) like '%BARCELONA%' AND (upper(nom_organ) like '%INNOVACI%' OR upper(nom_organ) like '%INFORM%')))")
+    blocks.append(soda(F, LOC+" AND fase_publicacio='Anunci de licitació' AND termini_presentacio_ofertes > '"+since+"'", "termini_presentacio_ofertes ASC", 1500))
+    blocks.append(soda(F, LOC+" AND fase_publicacio='Adjudicació'", "data_publicacio_adjudicacio DESC", 300))
+    blocks.append(soda(F, LOC+" AND fase_publicacio='Expedient en avaluació'", "termini_presentacio_ofertes DESC", 300))
     seen={}
     for blk in blocks:
         for r in blk:
@@ -144,7 +150,17 @@ def build_snapshot():
         if k: om.setdefault(k,r)
     OPEN=[rec(r) for r in om.values()]
     OPEN.sort(key=lambda x:(0 if x["sda"]=="child" else 1, x["termini"] or "9999"))
-    return {"generated":time.strftime("%Y-%m-%d", time.gmtime()),"open":OPEN,"adjudicated":[rec(r) for r in a]}
+    # ---- Bloc B: mon local (ajuntaments + diputacions + BIT) ----
+    LOC=("(upper(nom_organ) like '%AJUNTAMENT%' OR upper(nom_organ) like '%DIPUTACI%' OR "
+         "(upper(nom_organ) like '%INSTITUT MUNICIPAL%' AND upper(nom_organ) like '%BARCELONA%' AND (upper(nom_organ) like '%INNOVACI%' OR upper(nom_organ) like '%INFORM%')))")
+    ol=soda(SF, LOC+" AND fase_publicacio='Anunci de licitació' AND termini_presentacio_ofertes > '"+since+"'", "termini_presentacio_ofertes ASC", 3000)
+    ol=[r for r in dedup_raw(ol) if cpv_match(r.get("codi_cpv"))][:150]
+    al=soda(SF, LOC+" AND fase_publicacio='Adjudicació'", "data_publicacio_adjudicacio DESC", 1500)
+    al=[r for r in dedup_raw(al) if cpv_match(r.get("codi_cpv")) and num(r.get("import_adjudicacio_sense")) and num(r.get("pressupost_licitacio_sense"))][:40]
+    OPENL=[rec(r) for r in ol]; OPENL.sort(key=lambda x:(x["termini"] or "9999"))
+    return {"generated":time.strftime("%Y-%m-%d", time.gmtime()),
+            "open":OPEN,"adjudicated":[rec(r) for r in a],
+            "openLocal":OPENL,"adjLocal":[rec(r) for r in al]}
 
 
 def alive_check():
